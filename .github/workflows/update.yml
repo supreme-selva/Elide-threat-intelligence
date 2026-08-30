@@ -1,21 +1,32 @@
 name: Update Blocklist
 
 on:
-  # Runs whenever code is pushed to main (lets you watch it work immediately).
+  # Rebuild when the engine or the workflow itself changes (lets you watch it
+  # work immediately). Doc-only pushes are ignored to save Actions minutes.
   push:
     branches: [main]
+    paths:
+      - "process_lists.py"
+      - ".github/workflows/update.yml"
   schedule:
-    # Every day at 02:00 UTC
+    # Every day at 02:00 UTC.
     - cron: "0 2 * * *"
   workflow_dispatch: {}
 
-# Required so git-auto-commit-action can push the regenerated list back.
+# Least-privilege token: only what git-auto-commit-action needs to push.
 permissions:
   contents: write
 
+# Never let two builds race to commit the same file.
+concurrency:
+  group: blocklist-update
+  cancel-in-progress: false
+
 jobs:
   build:
+    name: Build & publish ruleset
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -34,3 +45,5 @@ jobs:
         with:
           commit_message: "Automated blocklist update"
           file_pattern: "final_blocklist.txt"
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "41898282+github-actions[bot]@users.noreply.github.com"

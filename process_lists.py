@@ -1,50 +1,41 @@
 #!/usr/bin/env python3
-"""
-process_lists.py
-================
-Serverless DNS blocklist builder for the *network-ruleset-engine*
-(repository: Elide-threat-intelligence).
+"""Elide Threat Intelligence — DNS blocklist build engine.
 
-It downloads a set of tracker blocklists and a set of ad blocklists, computes
-their intersection, tags every domain with a category prefix based on set
-membership, sorts the result, and writes it to ``final_blocklist.txt`` so an
-Android app can pull it straight from GitHub's raw CDN.
+Downloads a set of tracker blocklists and a set of ad blocklists, computes
+their intersection, tags every domain by set membership, sorts the result, and
+writes it to ``final_blocklist.txt`` for distribution over GitHub's raw CDN.
 
 Set operations
 --------------
     set_trackers   = union of every TRACKER_URLS list
     set_ads        = union of every AD_URLS list
-    set_both       = set_trackers ∩ set_ads      -> prefix "03"
-    pure_trackers  = set_trackers - set_both      -> prefix "01"
-    pure_ads       = set_ads - set_both           -> prefix "02"
+    set_both       = set_trackers & set_ads       -> prefix "03"
+    pure_trackers  = set_trackers - set_both       -> prefix "01"
+    pure_ads       = set_ads - set_both            -> prefix "02"
 
-Every domain therefore lands in exactly one category, so no domain is emitted
-more than once.
+Every domain lands in exactly one category, so no domain is emitted twice.
 
-Category prefixes
------------------
-    01  ->  pure trackers (only in the tracker lists)
-    02  ->  pure ads      (only in the ad lists)
-    03  ->  both          (present in a tracker list AND an ad list)
+Output format (stable — downstream apps depend on it)
+-----------------------------------------------------
+    UTF-8, LF line endings, sorted, one entry per line: ``<tag> <domain>``.
 
 Sources
 -------
     Trackers : Firebog EasyPrivacy + HaGeZi native OEM tracker lists
     Ads      : HaGeZi "Pro"
 
-Note on URLs
-------------
-HaGeZi serves the plain-domain lists from the ``wildcard/`` folder with the
-``-onlydomains`` suffix. The older ``domains/`` path no longer exists and
-returns HTTP 404, so these ``-onlydomains`` URLs are the verified sources.
+    HaGeZi serves the plain-domain lists from the ``wildcard/`` folder with the
+    ``-onlydomains`` suffix; the older ``domains/`` path returns HTTP 404.
 
 Licensing
 ---------
-Source lists are GPL-3.0 (HaGeZi) and GPL-3.0 (EasyPrivacy via Firebog). This
-engine and its generated output are distributed under GPL-3.0 as well.
+    Source lists are GPL-3.0 (HaGeZi) and GPL-3.0 (EasyPrivacy via Firebog).
+    This engine and its output are distributed under GPL-3.0 as well.
 
-Standard library only - no third-party dependencies.
+Standard library only — no third-party dependencies.
 """
+
+from __future__ import annotations
 
 import os
 import sys
@@ -57,8 +48,8 @@ import urllib.request
 
 _HAGEZI = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard"
 
-# Tracker lists -> categorised as "01" (unless also present in the ad set).
-TRACKER_URLS = [
+#: Tracker sources — categorised "01" unless also present in the ad set.
+TRACKER_URLS: list[str] = [
     "https://v.firebog.net/hosts/Easyprivacy.txt",
     f"{_HAGEZI}/native.apple-onlydomains.txt",
     f"{_HAGEZI}/native.huawei-onlydomains.txt",
@@ -68,8 +59,8 @@ TRACKER_URLS = [
     f"{_HAGEZI}/native.xiaomi-onlydomains.txt",
 ]
 
-# Ad lists -> categorised as "02" (unless also present in the tracker set).
-AD_URLS = [
+#: Ad sources — categorised "02" unless also present in the tracker set.
+AD_URLS: list[str] = [
     f"{_HAGEZI}/pro-onlydomains.txt",
 ]
 
@@ -82,11 +73,11 @@ OUTPUT_FILE = os.path.join(
 )
 
 # GitHub raw / Firebog can reject the default urllib User-Agent, so send our own.
-REQUEST_HEADERS = {"User-Agent": "network-ruleset-engine/1.0 (+https://github.com)"}
+REQUEST_HEADERS = {"User-Agent": "elide-threat-intelligence/1.0 (+https://github.com)"}
 REQUEST_TIMEOUT = 60  # seconds
 
-# Hosts-file noise to ignore. Lines like "0.0.0.0 example.com" are reduced to
-# the domain; bare localhost/loopback entries are dropped entirely.
+# Hosts-file noise. Lines like "0.0.0.0 example.com" are reduced to the domain;
+# bare localhost/loopback entries are dropped entirely.
 _IP_PREFIXES = {"0.0.0.0", "127.0.0.1", "::1", "255.255.255.255", "fe80::1", "ff02::1", "ff02::2"}
 _SKIP_TOKENS = {
     "localhost",
@@ -104,7 +95,7 @@ _SKIP_TOKENS = {
 # Core logic
 # --------------------------------------------------------------------------- #
 
-def download(url):
+def download(url: str) -> str:
     """Download ``url`` and return its body decoded as UTF-8 text."""
     print(f"  -> Fetching {url}")
     request = urllib.request.Request(url, headers=REQUEST_HEADERS)
@@ -113,13 +104,13 @@ def download(url):
     return raw.decode("utf-8", errors="replace")
 
 
-def parse_domains(text):
+def parse_domains(text: str) -> set[str]:
     """Return a set of clean, lowercased domains parsed from raw list ``text``.
 
     Ignores blank lines, comment lines (``#``), and localhost/loopback noise.
     Handles both plain "domain" and hosts-style "0.0.0.0 domain" lines.
     """
-    domains = set()
+    domains: set[str] = set()
     for line in text.splitlines():
         entry = line.strip()
         if not entry or entry.startswith("#"):
@@ -138,35 +129,36 @@ def parse_domains(text):
     return domains
 
 
-def collect(urls, label):
+def collect(urls: list[str], label: str) -> set[str]:
     """Download every URL in ``urls`` and return the merged set of domains."""
     print(f"Processing {label} lists ({len(urls)} source(s))...")
-    merged = set()
+    merged: set[str] = set()
     for url in urls:
-        text = download(url)
-        found = parse_domains(text)
+        found = parse_domains(download(url))
         print(f"     {len(found):>8,} domains")
         merged |= found
     print(f"  {label} unique domains: {len(merged):,}\n")
     return merged
 
 
-def build():
-    """Fetch, apply set operations, tag, sort and write the final blocklist."""
+def build() -> dict[str, int]:
+    """Fetch, apply set operations, tag, sort and write the final blocklist.
+
+    Returns a dict of counts for logging and the CI job summary.
+    """
     print("=" * 62)
-    print("network-ruleset-engine :: building final_blocklist.txt")
+    print("elide-threat-intelligence :: building final_blocklist.txt")
     print("=" * 62)
 
     set_trackers = collect(TRACKER_URLS, "tracker")
     set_ads = collect(AD_URLS, "ad")
 
-    # Set operations.
+    # Set operations — each domain ends up in exactly one bucket.
     set_both = set_trackers & set_ads
     pure_trackers = set_trackers - set_both
     pure_ads = set_ads - set_both
 
-    # Tag each domain by category. Every domain is in exactly one bucket.
-    tagged = set()
+    tagged: set[str] = set()
     tagged.update(f"{TRACKER_PREFIX} {domain}" for domain in pure_trackers)
     tagged.update(f"{AD_PREFIX} {domain}" for domain in pure_ads)
     tagged.update(f"{BOTH_PREFIX} {domain}" for domain in set_both)
@@ -177,19 +169,57 @@ def build():
         handle.write("\n".join(output))
         handle.write("\n")
 
+    counts = {
+        "trackers": len(set_trackers),
+        "ads": len(set_ads),
+        "pure_trackers": len(pure_trackers),
+        "pure_ads": len(pure_ads),
+        "both": len(set_both),
+        "total": len(output),
+    }
+
     print("-" * 62)
-    print(f"  01 pure trackers : {len(pure_trackers):>9,}")
-    print(f"  02 pure ads      : {len(pure_ads):>9,}")
-    print(f"  03 in both sets  : {len(set_both):>9,}")
-    print(f"  total written    : {len(output):>9,}")
+    print(f"  01 pure trackers : {counts['pure_trackers']:>9,}")
+    print(f"  02 pure ads      : {counts['pure_ads']:>9,}")
+    print(f"  03 in both sets  : {counts['both']:>9,}")
+    print(f"  total written    : {counts['total']:>9,}")
     print(f"  output file      : {OUTPUT_FILE}")
     print("-" * 62)
     print("Done.")
+    return counts
 
 
-def main():
+def write_job_summary(counts: dict[str, int]) -> None:
+    """Write a Markdown build summary to the GitHub Actions run, if available.
+
+    No-op outside CI (when ``GITHUB_STEP_SUMMARY`` is unset).
+    """
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not summary_path:
+        return
+
+    rows = [
+        "## Blocklist build summary",
+        "",
+        "| Category | Tag | Domains |",
+        "| :--- | :---: | ---: |",
+        f"| Pure trackers | `01` | {counts['pure_trackers']:,} |",
+        f"| Pure ads | `02` | {counts['pure_ads']:,} |",
+        f"| Both (intersection) | `03` | {counts['both']:,} |",
+        f"| **Total** | | **{counts['total']:,}** |",
+        "",
+        f"Tracker set: **{counts['trackers']:,}** unique · "
+        f"Ad set: **{counts['ads']:,}** unique",
+        "",
+    ]
+    with open(summary_path, "a", encoding="utf-8") as handle:
+        handle.write("\n".join(rows) + "\n")
+
+
+def main() -> None:
     try:
-        build()
+        counts = build()
+        write_job_summary(counts)
     except urllib.error.HTTPError as exc:
         print(f"ERROR: HTTP {exc.code} while fetching {exc.url}", file=sys.stderr)
         sys.exit(1)

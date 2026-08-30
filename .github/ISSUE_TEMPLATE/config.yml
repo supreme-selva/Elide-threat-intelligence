@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Upstream — HaGeZi DNS Blocklists
+    url: https://github.com/hagezi/dns-blocklists/issues
+    about: For issues with the underlying HaGeZi list content, report upstream.
+  - name: Upstream — EasyList / EasyPrivacy
+    url: https://github.com/easylist/easylist/issues
+    about: For issues with EasyPrivacy list content, report upstream.

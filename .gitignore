@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Tooling / caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local scratch / logs (never commit build logs or temp output)
+*.log
+build_log.txt
+op.txt
+state.txt
+sync.txt
+push.txt
+
+# NOTE: final_blocklist.txt is intentionally tracked — it is the published
+# CDN artifact and is committed by the automated workflow.
