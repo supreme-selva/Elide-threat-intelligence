@@ -1,0 +1,15 @@
+# Normalize line endings: store text as LF in the repository.
+* text=auto eol=lf
+
+# The published ruleset is served verbatim over the raw CDN — always LF.
+final_blocklist.txt text eol=lf
+
+# Source & config
+*.py   text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Windows scripts (if ever added) keep CRLF.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
