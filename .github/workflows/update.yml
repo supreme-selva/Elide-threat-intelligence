@@ -1,6 +1,9 @@
 name: Update Blocklist
 
 on:
+  # Runs whenever code is pushed to main (lets you watch it work immediately).
+  push:
+    branches: [main]
   schedule:
     # Every day at 02:00 UTC
     - cron: "0 2 * * *"
